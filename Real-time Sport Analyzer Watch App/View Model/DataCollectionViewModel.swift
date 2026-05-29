@@ -5,29 +5,39 @@
 
 import SwiftUI
 import CoreMotion
+import WatchKit
 
 final class DataCollectionViewModel: NSObject, ObservableObject {
     @Published var status: String = "Idle"
+    @Published var timeRemaining: Int = 10
     @Published var isCollecting: Bool = false
     @Published var motionData: [MotionDataModel] = []
 
     private let motionManager = CMMotionManager()
     private let pedometer = CMPedometer()
+    private var collectionTimer: Timer?
     private var currentPace: Double = 0.0
     private var currentStepCount: Int = 0
     private var currentCadence: Double = 0.0
+    private var numTrans: Int = 0
     private var currentActivity: String = ""
 
     func startCollectingData(for activity: String) {
-        currentActivity = activity
+        timeRemaining = 10
         isCollecting = true
         motionData = []
+
+        if currentActivity != activity {
+            numTrans = 0
+        }
+        currentActivity = activity
 
         guard motionManager.isDeviceMotionAvailable else {
             status = "No Motion Data"
             return
         }
 
+        provideHapticFeedback()
         startPedometerUpdates()
         motionManager.deviceMotionUpdateInterval = 1.0 / 50.0
         motionManager.startDeviceMotionUpdates(using: .xMagneticNorthZVertical, to: OperationQueue.current!) { [weak self] data, _ in
@@ -51,7 +61,15 @@ final class DataCollectionViewModel: NSObject, ObservableObject {
             self.motionData.append(record)
         }
 
+        collectionTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            self?.updateCountdown()
+        }
+
         status = "Collecting \(activity) data"
+    }
+
+    private func provideHapticFeedback() {
+        WKInterfaceDevice.current().play(.start)
     }
 
     private func startPedometerUpdates() {
@@ -65,9 +83,27 @@ final class DataCollectionViewModel: NSObject, ObservableObject {
         }
     }
 
+    private func updateCountdown() {
+        if timeRemaining > 0 {
+            timeRemaining -= 1
+        } else {
+            stopCollectingData()
+        }
+    }
+
     func stopCollectingData() {
+        stopCycle()
+        if numTrans < 100 {
+            numTrans += 1
+            startCollectingData(for: currentActivity)
+        }
+    }
+
+    func stopCycle() {
         motionManager.stopDeviceMotionUpdates()
         pedometer.stopUpdates()
+        collectionTimer?.invalidate()
+        collectionTimer = nil
         isCollecting = false
         status = "Collection stopped"
     }
