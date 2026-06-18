@@ -85,7 +85,7 @@ class SportDetectionViewModel: ObservableObject {
         
     }
     private func makePrediction() {
-        guard let model = model, dataBuffer.count > 0 else { return }
+        guard let model = model, !dataBuffer.isEmpty else { return }
 
         // Calculate statistics for the 1-second window
         let accelXStats = calculateStatistics(for: dataBuffer.map { $0.accelX })
